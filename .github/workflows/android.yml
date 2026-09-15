@@ -21,15 +21,16 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # ubuntu-latest already has the Android SDK pre-installed.
+      # We just accept licenses and install the specific components needed.
+      # This avoids android-actions/setup-android@v3 which fails because
+      # the deprecated 'tools' package was removed from modern cmdline-tools.
       - name: Accept Android SDK licences
-        run: yes | sdkmanager --licenses 2>/dev/null || true
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Install required Android SDK components
         run: |
-          sdkmanager \
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-34" \
             "build-tools;34.0.0" \
             "platform-tools"
@@ -54,8 +55,6 @@ jobs:
           fi
           SIZE=$(stat -c%s "$APK")
           echo "APK OK: $SIZE bytes"
-          echo "APK_PATH=$APK" >> $GITHUB_ENV
-          echo "APK_SIZE=$SIZE" >> $GITHUB_ENV
 
       - name: Inspect APK contents (web assets check)
         run: |
