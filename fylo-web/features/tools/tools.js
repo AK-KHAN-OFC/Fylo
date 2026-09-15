@@ -1268,4 +1268,5 @@ export const ToolsModule = {
   wireInputs:       ()     => wireToolInputs(),
 };
 
-// Wiring is done by bootstrap() via ToolsModule.wireInputs() — do not self-wire here.
+// Wire inputs on module load (after DOM is ready via type=module defer)
+// Wiring done by bootstrap() via ToolsModule.wireInputs()

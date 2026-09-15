@@ -62,32 +62,24 @@ export async function initStorage() {
 }
 
 // ── Generic CRUD ──────────────────────────────────────────────────────────────
-// 1.5 s settled timeout — guards against Android WebView IDB transactions
-// that never fire onsuccess/onerror. All callers have try/catch so bootstrap
-// always continues and _hideSplash() is guaranteed to execute.
+// 1.5 s timeout guards against IDB transactions that never settle
+// (known Android WebView bug). All callers catch the rejection.
 function _tx(storeName, mode, fn) {
   return new Promise((resolve, reject) => {
     if (!_db) { reject(new Error('DB not initialised — call initStorage() first')); return; }
     let settled = false;
     const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      log.error('IDB transaction timed out (1.5 s) — store: ' + storeName);
+      if (settled) return; settled = true;
+      log.error('IDB tx timed out (1.5 s) — store: ' + storeName);
       reject(new Error('IDB transaction timed out (1.5 s)'));
     }, 1500);
     try {
       const tx  = _db.transaction(storeName, mode);
       const st  = tx.objectStore(storeName);
       const req = fn(st);
-      req.onsuccess = () => {
-        if (settled) return;
-        settled = true; clearTimeout(timer); resolve(req.result ?? null);
-      };
-      req.onerror = () => {
-        if (settled) return;
-        settled = true; clearTimeout(timer); reject(req.error);
-      };
-    } catch (e) { if (!settled) { settled = true; clearTimeout(timer); reject(e); } }
+      req.onsuccess = () => { if (settled) return; settled=true; clearTimeout(timer); resolve(req.result ?? null); };
+      req.onerror   = () => { if (settled) return; settled=true; clearTimeout(timer); reject(req.error); };
+    } catch (e) { if (!settled) { settled=true; clearTimeout(timer); reject(e); } }
   });
 }
 

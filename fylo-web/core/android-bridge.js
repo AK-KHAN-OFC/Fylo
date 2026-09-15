@@ -74,12 +74,10 @@ export function androidRequestCamera() {
       resolve(true);
       return;
     }
-    // 30 s timeout: resolves false if callback is never delivered
+    // Result delivered via fyloOnCameraPermission callback
     const timer = setTimeout(() => { window.fyloOnCameraPermission = null; resolve(false); }, 30000);
     window.fyloOnCameraPermission = (granted) => {
-      clearTimeout(timer);
-      window.fyloOnCameraPermission = null;
-      resolve(granted);
+      clearTimeout(timer); window.fyloOnCameraPermission = null; resolve(granted);
     };
     window.AndroidBridge.requestCameraPermission();
   });
@@ -133,4 +131,21 @@ export function installBackHandler() {
 export function exposeBusToAndroid(bus) {
   window.fyloEventBus = bus;
   log.info('Event bus exposed to Android bridge');
+}
+
+// ── libs.js local path injection ─────────────────────────────────────────────
+/**
+ * When running in Android, PDF.js and PDF-Lib are bundled locally.
+ * This injects the correct file:///android_asset paths so libs.js
+ * can load them without CDN access.
+ *
+ * Must be called before Libs.init().
+ */
+export function getAndroidLibPaths() {
+  const base = 'file:///android_asset/www/assets/libs';
+  return {
+    pdfjsSrc:    `${base}/pdf.min.js`,
+    pdfjsWorker: `${base}/pdf.worker.min.js`,
+    pdflibSrc:   `${base}/pdf-lib.min.js`,
+  };
 }
