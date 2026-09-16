@@ -80,7 +80,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean mNeedSwCheck = true;
 
     // Counts renderer crashes — prevents infinite crash-reload loops
-    private int mRendererCrashCount = 0;
+    private static int sRendererCrashCount = 0;
 
     // Evaluates on first page load to evict stale Service Worker registrations.
     // Self-guarded: no SW found -> early return, no reload.
@@ -240,6 +240,11 @@ public class MainActivity extends AppCompatActivity {
                 // Evict stale SW on every first page load of each session.
                 // No SW found -> JS early-return, no reload, no overhead.
                 // Stale SW found -> unregister + reload; fresh APK assets served.
+                // Reset renderer crash count once a page loads successfully.
+                // This means transient crashes (e.g. during a heavy operation)
+                // don't permanently exhaust the retry budget.
+                sRendererCrashCount = 0;
+
                 if (mNeedSwCheck) {
                     mNeedSwCheck = false;
                     mWebView.evaluateJavascript(SW_UNREGISTER_JS, null);
@@ -261,12 +266,18 @@ public class MainActivity extends AppCompatActivity {
             public boolean onRenderProcessGone(
                     WebView view, RenderProcessGoneDetail detail) {
                 Log.e(TAG, "WebView renderer gone — didCrash=" + detail.didCrash()
-                        + " crashCount=" + mRendererCrashCount);
-                if (mRendererCrashCount >= 3) {
-                    Log.e(TAG, "Renderer crashed 3 times — giving up");
+                        + " crashCount=" + sRendererCrashCount);
+                if (sRendererCrashCount >= 3) {
+                    Log.e(TAG, "Renderer crashed 3 times — stopping retries");
+                    // Show user a way to manually retry rather than freezing forever
+                    runOnUiThread(() -> {
+                        Toast.makeText(MainActivity.this,
+                            "App failed to load. Tap the FYLO icon to try again.",
+                            Toast.LENGTH_LONG).show();
+                    });
                     return true;
                 }
-                mRendererCrashCount++;
+                sRendererCrashCount++;
                 recreate();
                 return true;
             }
