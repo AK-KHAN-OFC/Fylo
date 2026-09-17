@@ -170,11 +170,26 @@ public class MainActivity extends AppCompatActivity {
         settings.setDisplayZoomControls(false);
         settings.setSupportZoom(false);  // FYLO manages its own zoom
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // Disable Safe Browsing — all content is served from local APK assets,
+        // so Safe Browsing provides no security benefit and wastes memory.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            settings.setSafeBrowsingEnabled(false);
+        }
         // Note: setAllowFileAccessFromFileURLs / setAllowUniversalAccessFromFileURLs
         // are NOT set — they are insecure and unnecessary when using WebViewAssetLoader.
 
         // Add the JavaScript bridge — only accessible from our bundled https origin
         mWebView.addJavascriptInterface(new FyloBridge(), "AndroidBridge");
+
+        // Tell Android this renderer is important — do not kill it under memory pressure.
+        // The renderer crashing before any JS runs is almost always an OOM kill.
+        // waiveMemoryLimit=true allows it to use more memory than the default limit.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            mWebView.setRendererPriorityPolicy(
+                WebView.RENDERER_PRIORITY_IMPORTANT,
+                true  // waiveMemoryLimit
+            );
+        }
 
         // WebViewClientCompat — required to correctly support both shouldInterceptRequest
         // overloads across all WebView versions (androidx.webkit handles API differences).
@@ -270,9 +285,10 @@ public class MainActivity extends AppCompatActivity {
                 if (sRendererCrashCount >= 3) {
                     Log.e(TAG, "Renderer crashed 3 times — stopping retries");
                     // Show user a way to manually retry rather than freezing forever
+                    final boolean didCrash = detail.didCrash();
                     runOnUiThread(() -> {
                         Toast.makeText(MainActivity.this,
-                            "App failed to load. Tap the FYLO icon to try again.",
+                            "FYLO failed (crash=" + didCrash + "). Tap icon to retry.",
                             Toast.LENGTH_LONG).show();
                     });
                     return true;
@@ -316,9 +332,9 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // Enable WebView debugging in debug builds
-        if (BuildConfig.DEBUG) {
-            WebView.setWebContentsDebuggingEnabled(true);
-        }
+        // Debugging disabled — the overhead can contribute to renderer instability.
+        // Re-enable locally if needed: WebView.setWebContentsDebuggingEnabled(true);
+        WebView.setWebContentsDebuggingEnabled(false);
     }
 
     // ── Intent handling ───────────────────────────────────────────────────────
