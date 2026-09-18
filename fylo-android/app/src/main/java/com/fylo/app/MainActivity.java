@@ -18,6 +18,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.app.AlertDialog;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
@@ -29,6 +30,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewAssetLoader.AssetsPathHandler;
 import androidx.webkit.WebViewClientCompat;
 
@@ -283,14 +285,9 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, "WebView renderer gone — didCrash=" + detail.didCrash()
                         + " crashCount=" + sRendererCrashCount);
                 if (sRendererCrashCount >= 3) {
-                    Log.e(TAG, "Renderer crashed 3 times — stopping retries");
-                    // Show user a way to manually retry rather than freezing forever
+                    Log.e(TAG, "Renderer crashed 3 times — showing diagnostic");
                     final boolean didCrash = detail.didCrash();
-                    runOnUiThread(() -> {
-                        Toast.makeText(MainActivity.this,
-                            "FYLO failed (crash=" + didCrash + "). Tap icon to retry.",
-                            Toast.LENGTH_LONG).show();
-                    });
+                    runOnUiThread(() -> showCrashDiagnostic(didCrash));
                     return true;
                 }
                 sRendererCrashCount++;
@@ -456,6 +453,54 @@ public class MainActivity extends AppCompatActivity {
                 null
             );
         }
+    }
+
+    // ── Crash diagnostic dialog ───────────────────────────────────────────────
+    // Shown after 3 renderer crashes. Collects device/WebView/RAM info so the
+    // user can screenshot it and share it for debugging without needing logcat.
+    private void showCrashDiagnostic(boolean didCrash) {
+        String webViewVer = "unknown";
+        String webViewPkg = "unknown";
+        try {
+            android.content.pm.PackageInfo wp =
+                WebViewCompat.getCurrentWebViewPackage(this);
+            if (wp != null) {
+                webViewVer = wp.versionName;
+                webViewPkg = wp.packageName;
+            }
+        } catch (Exception e) { /* ignore */ }
+
+        long ramMB = -1;
+        try {
+            android.app.ActivityManager.MemoryInfo mem =
+                new android.app.ActivityManager.MemoryInfo();
+            ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE))
+                .getMemoryInfo(mem);
+            ramMB = mem.availMem / (1024 * 1024);
+        } catch (Exception e) { /* ignore */ }
+
+        String info =
+            "didCrash: " + didCrash + "\n" +
+            "Android API: " + android.os.Build.VERSION.SDK_INT + "\n" +
+            "Device: " + android.os.Build.MANUFACTURER +
+                " " + android.os.Build.MODEL + "\n" +
+            "WebView: " + webViewVer + "\n" +
+            "WebView pkg: " + webViewPkg + "\n" +
+            "Free RAM: " + ramMB + " MB";
+
+        Log.e(TAG, "FYLO CRASH DIAGNOSTIC:\n" + info);
+
+        new AlertDialog.Builder(this)
+            .setTitle("FYLO — Crash Info")
+            .setMessage("App renderer crashed 3 times.\n\n" + info +
+                "\n\nPlease SCREENSHOT this and share it.")
+            .setPositiveButton("Retry", (d, w) -> {
+                sRendererCrashCount = 0;
+                recreate();
+            })
+            .setNegativeButton("Close", null)
+            .setCancelable(false)
+            .show();
     }
 
     // ── JavaScript Bridge ─────────────────────────────────────────────────────
